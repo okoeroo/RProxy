@@ -616,7 +616,7 @@ downstream_connection_set_idle(downstream_c_t * connection) {
             downstream->num_idle   -= 1;
             break;
         case downstream_status_down:
-            logger_log(downstream->rproxy->log, lzlog_info,
+            logger_log(downstream->rproxy->err_log, lzlog_info,
                        "%s() downstream %s:%d is now UP",
                        __FUNCTION__,
                        downstream->config->host,
@@ -678,7 +678,7 @@ downstream_connection_set_down(downstream_c_t * connection) {
     }
 
     if (connection->status != downstream_status_down) {
-        logger_log(downstream->rproxy->log, lzlog_err,
+        logger_log(downstream->rproxy->err_log, lzlog_err,
                    "%s(): downstream proxy:%d -> %s:%d is down",
                    __FUNCTION__,
                    connection->sport,
@@ -1050,7 +1050,7 @@ downstream_connection_get(rule_t * rule) {
             return downstream_connection_get_none(rule);
         case lb_method_rand:
         default:
-            logger_log(rule->rproxy->log, lzlog_crit,
+            logger_log(rule->rproxy->err_log, lzlog_crit,
                        "%s(): unknown lb method %d", __FUNCTION__, rcfg->lb_method);
             break;
     }
@@ -1187,15 +1187,16 @@ downstream_connection_eventcb(evbev_t * bev, short events, void * arg) {
      */
 
     if (connection && connection->status != downstream_status_down) {
-        printf("downstream %s socket event (source port=%d) error %d (errno=%s) [ %s%s%s%s%s%s]",
-               connection->parent->config->name,
-               connection->sport, events, strerror(errno),
-               (events & BEV_EVENT_READING) ? "READING " : "",
-               (events & BEV_EVENT_WRITING) ? "WRITING " : "",
-               (events & BEV_EVENT_EOF)     ? "EOF " : "",
-               (events & BEV_EVENT_ERROR) ? "ERROR " : "",
-               (events & BEV_EVENT_TIMEOUT) ? "TIMEOUT " : "",
-               (events & BEV_EVENT_CONNECTED) ? "CONNECTED " : "");
+        logger_log(rproxy->err_log, lzlog_info,
+                   "downstream %s socket event (source port=%d) error %d (errno=%s) [ %s%s%s%s%s%s]",
+                   connection->parent->config->name,
+                   connection->sport, events, strerror(errno),
+                   (events & BEV_EVENT_READING) ? "READING " : "",
+                   (events & BEV_EVENT_WRITING) ? "WRITING " : "",
+                   (events & BEV_EVENT_EOF)     ? "EOF " : "",
+                   (events & BEV_EVENT_ERROR) ? "ERROR " : "",
+                   (events & BEV_EVENT_TIMEOUT) ? "TIMEOUT " : "",
+                   (events & BEV_EVENT_CONNECTED) ? "CONNECTED " : "");
     }
 
 
@@ -1316,7 +1317,6 @@ downstream_connection_readcb(evbev_t * bev, void * arg) {
             if (request->done) {
                 downstream_connection_set_idle(connection);
             } else {
-                /* evhtp_connection_free(c); */
                 evhtp_send_reply(request->upstream_request, 200);
                 downstream_connection_set_down(connection);
             }
@@ -1332,7 +1332,6 @@ downstream_connection_readcb(evbev_t * bev, void * arg) {
 
                 evhtp_send_reply_end(request->upstream_request);
             } else {
-                /* evhtp_connection_free(c); */
                 evhtp_send_reply(request->upstream_request, 200);
                 downstream_connection_set_down(connection);
             }
@@ -1445,7 +1444,7 @@ downstream_connection_init(evbase_t * evbase, downstream_t * downstream) {
         int              res;
 
         if (!(connection = downstream_connection_new(evbase, downstream))) {
-            logger_log(downstream->rproxy->log, lzlog_crit,
+            logger_log(downstream->rproxy->err_log, lzlog_crit,
                        "%s(): could not create ds conn (%s)",
                        __FUNCTION__, strerror(errno));
             exit(EXIT_FAILURE);
